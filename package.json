@@ -1,0 +1,24 @@
+{
+  "name": "nestjs-pluggable-module",
+  "version": "1.0.0",
+  "description": "A monorepo for NestJS pluggable modules following Hexagonal Architecture",
+  "private": true,
+  "scripts": {
+    "build": "pnpm -r build",
+    "clean": "pnpm -r clean",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test"
+  },
+  "keywords": [
+    "nestjs",
+    "hexagonal-architecture",
+    "pluggable-module",
+    "dynamic-module"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}
