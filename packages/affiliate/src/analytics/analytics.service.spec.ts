@@ -169,4 +169,120 @@ describe('AnalyticsService', () => {
       expect(result).toBe(0);
     });
   });
+
+  describe('getUserStats', () => {
+    it('should get stats for all user codes', async () => {
+      const stats = [
+        { code: 'CODE1', clicks: 100, signups: 50, conversions: 10, totalCommission: 500 },
+        { code: 'CODE2', clicks: 50, signups: 25, conversions: 5, totalCommission: 250 },
+      ];
+      repository.getStatsByUser.mockResolvedValue(stats);
+
+      const result = await service.getUserStats('user-1');
+
+      expect(result).toEqual(stats);
+      expect(repository.getStatsByUser).toHaveBeenCalledWith('user-1', undefined);
+    });
+
+    it('should get stats with date range', async () => {
+      const dateRange = { from: new Date('2024-01-01'), to: new Date('2024-12-31') };
+      repository.getStatsByUser.mockResolvedValue([]);
+
+      await service.getUserStats('user-1', dateRange);
+
+      expect(repository.getStatsByUser).toHaveBeenCalledWith('user-1', dateRange);
+    });
+  });
+
+  describe('getEvents', () => {
+    it('should get events for a code', async () => {
+      const events = [
+        { id: '1', code: 'CODE1', type: 'click' as const, createdAt: new Date() },
+        { id: '2', code: 'CODE1', type: 'conversion' as const, createdAt: new Date() },
+      ];
+      repository.getEvents.mockResolvedValue(events);
+
+      const result = await service.getEvents('CODE1');
+
+      expect(result).toEqual(events);
+      expect(repository.getEvents).toHaveBeenCalledWith('CODE1', undefined, undefined);
+    });
+
+    it('should get events filtered by type', async () => {
+      repository.getEvents.mockResolvedValue([]);
+
+      await service.getEvents('CODE1', 'click');
+
+      expect(repository.getEvents).toHaveBeenCalledWith('CODE1', 'click', undefined);
+    });
+
+    it('should get events with date range', async () => {
+      const dateRange = { from: new Date('2024-01-01'), to: new Date('2024-12-31') };
+      repository.getEvents.mockResolvedValue([]);
+
+      await service.getEvents('CODE1', 'click', dateRange);
+
+      expect(repository.getEvents).toHaveBeenCalledWith('CODE1', 'click', dateRange);
+    });
+  });
+
+  describe('getCodeStats with date range', () => {
+    it('should pass date range to repository', async () => {
+      const dateRange = { from: new Date('2024-01-01'), to: new Date('2024-12-31') };
+      repository.getStatsByCode.mockResolvedValue({
+        code: 'CODE1',
+        clicks: 100,
+        signups: 50,
+        conversions: 10,
+        totalCommission: 500,
+      });
+
+      await service.getCodeStats('CODE1', dateRange);
+
+      expect(repository.getStatsByCode).toHaveBeenCalledWith('CODE1', dateRange);
+    });
+  });
+
+  describe('getConversionRate with date range', () => {
+    it('should pass date range to repository', async () => {
+      const dateRange = { from: new Date('2024-01-01'), to: new Date('2024-12-31') };
+      repository.getStatsByCode.mockResolvedValue({
+        code: 'CODE1',
+        clicks: 100,
+        signups: 50,
+        conversions: 10,
+        totalCommission: 500,
+      });
+
+      await service.getConversionRate('CODE1', dateRange);
+
+      expect(repository.getStatsByCode).toHaveBeenCalledWith('CODE1', dateRange);
+    });
+  });
+
+  describe('getTopCodes with defaults', () => {
+    it('should use default values', async () => {
+      repository.getTopCodes.mockResolvedValue([]);
+
+      await service.getTopCodes();
+
+      expect(repository.getTopCodes).toHaveBeenCalledWith(10, 'conversions', undefined);
+    });
+  });
+
+  describe('getUserAggregatedStats with empty stats', () => {
+    it('should return zeros for empty stats', async () => {
+      repository.getStatsByUser.mockResolvedValue([]);
+
+      const result = await service.getUserAggregatedStats('user-1');
+
+      expect(result).toEqual({
+        code: 'all',
+        clicks: 0,
+        signups: 0,
+        conversions: 0,
+        totalCommission: 0,
+      });
+    });
+  });
 });

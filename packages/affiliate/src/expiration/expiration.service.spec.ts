@@ -191,4 +191,174 @@ describe('ExpirationService', () => {
       expect(repository.activate).toHaveBeenCalledWith('CODE1');
     });
   });
+
+  describe('setExpiration', () => {
+    it('should set expiration date directly', async () => {
+      repository.setConstraints.mockResolvedValue();
+      const expiresAt = new Date('2025-12-31');
+
+      await service.setExpiration('CODE1', expiresAt);
+
+      expect(repository.setConstraints).toHaveBeenCalledWith('CODE1', { expiresAt });
+    });
+  });
+
+  describe('setMaxUses', () => {
+    it('should set max uses', async () => {
+      repository.setConstraints.mockResolvedValue();
+
+      await service.setMaxUses('CODE1', 50);
+
+      expect(repository.setConstraints).toHaveBeenCalledWith('CODE1', { maxUses: 50 });
+    });
+  });
+
+  describe('getConstraints', () => {
+    it('should return constraints', async () => {
+      const constraints = {
+        code: 'CODE1',
+        maxUses: 100,
+        currentUses: 50,
+        isActive: true,
+      };
+      repository.getConstraints.mockResolvedValue(constraints);
+
+      const result = await service.getConstraints('CODE1');
+
+      expect(result).toEqual(constraints);
+    });
+  });
+
+  describe('getExpiredCodes', () => {
+    it('should return expired codes', async () => {
+      repository.getExpiredCodes.mockResolvedValue(['CODE1', 'CODE2']);
+
+      const result = await service.getExpiredCodes();
+
+      expect(result).toEqual(['CODE1', 'CODE2']);
+    });
+  });
+
+  describe('getMaxedOutCodes', () => {
+    it('should return maxed out codes', async () => {
+      repository.getMaxedOutCodes.mockResolvedValue(['CODE3']);
+
+      const result = await service.getMaxedOutCodes();
+
+      expect(result).toEqual(['CODE3']);
+    });
+  });
+
+  describe('getTimeUntilExpiration', () => {
+    it('should return time until expiration', async () => {
+      const futureDate = new Date(Date.now() + 3600000);
+      repository.getConstraints.mockResolvedValue({
+        code: 'CODE1',
+        expiresAt: futureDate,
+        currentUses: 0,
+        isActive: true,
+      });
+
+      const result = await service.getTimeUntilExpiration('CODE1');
+
+      expect(result).toBeGreaterThan(0);
+      expect(result).toBeLessThanOrEqual(3600000);
+    });
+
+    it('should return null for code without expiration', async () => {
+      repository.getConstraints.mockResolvedValue({
+        code: 'CODE1',
+        currentUses: 0,
+        isActive: true,
+      });
+
+      const result = await service.getTimeUntilExpiration('CODE1');
+
+      expect(result).toBeNull();
+    });
+
+    it('should return null for non-existent code', async () => {
+      repository.getConstraints.mockResolvedValue(null);
+
+      const result = await service.getTimeUntilExpiration('CODE1');
+
+      expect(result).toBeNull();
+    });
+
+    it('should return 0 for already expired code', async () => {
+      repository.getConstraints.mockResolvedValue({
+        code: 'CODE1',
+        expiresAt: new Date(Date.now() - 3600000),
+        currentUses: 0,
+        isActive: true,
+      });
+
+      const result = await service.getTimeUntilExpiration('CODE1');
+
+      expect(result).toBe(0);
+    });
+  });
+
+  describe('getRemainingUses', () => {
+    it('should return null for non-existent code', async () => {
+      repository.getConstraints.mockResolvedValue(null);
+
+      const result = await service.getRemainingUses('CODE1');
+
+      expect(result).toBeNull();
+    });
+
+    it('should return 0 when uses exceed max', async () => {
+      repository.getConstraints.mockResolvedValue({
+        code: 'CODE1',
+        maxUses: 100,
+        currentUses: 150,
+        isActive: true,
+      });
+
+      const result = await service.getRemainingUses('CODE1');
+
+      expect(result).toBe(0);
+    });
+  });
+
+  describe('setExpirationFromDuration - all units', () => {
+    it('should parse seconds', async () => {
+      repository.setConstraints.mockResolvedValue();
+      await service.setExpirationFromDuration('CODE1', '30s');
+      expect(repository.setConstraints).toHaveBeenCalledWith('CODE1', {
+        expiresAt: expect.any(Date),
+      });
+    });
+
+    it('should parse minutes', async () => {
+      repository.setConstraints.mockResolvedValue();
+      await service.setExpirationFromDuration('CODE1', '5m');
+      expect(repository.setConstraints).toHaveBeenCalled();
+    });
+
+    it('should parse hours', async () => {
+      repository.setConstraints.mockResolvedValue();
+      await service.setExpirationFromDuration('CODE1', '24h');
+      expect(repository.setConstraints).toHaveBeenCalled();
+    });
+
+    it('should parse weeks', async () => {
+      repository.setConstraints.mockResolvedValue();
+      await service.setExpirationFromDuration('CODE1', '2w');
+      expect(repository.setConstraints).toHaveBeenCalled();
+    });
+
+    it('should parse months', async () => {
+      repository.setConstraints.mockResolvedValue();
+      await service.setExpirationFromDuration('CODE1', '3M');
+      expect(repository.setConstraints).toHaveBeenCalled();
+    });
+
+    it('should parse years', async () => {
+      repository.setConstraints.mockResolvedValue();
+      await service.setExpirationFromDuration('CODE1', '1y');
+      expect(repository.setConstraints).toHaveBeenCalled();
+    });
+  });
 });
