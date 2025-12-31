@@ -3,6 +3,9 @@ module.exports = {
   testEnvironment: 'node',
   roots: ['<rootDir>/src'],
   testMatch: ['**/*.spec.ts'],
-  collectCoverageFrom: ['src/**/*.ts', '!src/index.ts'],
+  collectCoverageFrom: [
+    'src/**/*.ts',
+    '!src/**/index.ts', // Exclude barrel exports
+  ],
   coverageDirectory: 'coverage',
 };

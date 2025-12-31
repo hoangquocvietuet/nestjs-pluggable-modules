@@ -3,7 +3,7 @@ import {
   AffiliateRepository,
   ReferralResult,
 } from './interfaces/affiliate-repository.interface';
-import { generate, Config } from './utils/code-generator';
+import { generate, Config } from '../utils/code-generator';
 
 @Injectable()
 export class AffiliateService {

@@ -1,4 +1,5 @@
-export * from './affiliate.module';
-export * from './affiliate.service';
-export * from './interfaces/affiliate-repository.interface';
+// Core module (default export)
+export * from './core';
+
+// Utilities
 export * from './utils/code-generator';

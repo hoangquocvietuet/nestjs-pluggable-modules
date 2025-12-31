@@ -1,128 +1,246 @@
 # @nestjs-pluggable/affiliate
 
-Database-agnostic affiliate/referral module for NestJS. Use with any database - Prisma, TypeORM, Mongoose, or your own.
+Database-agnostic affiliate/referral module for NestJS with **Rust-like feature composition**.
+
+## Key Concept
+
+**Import only what you need.** Unused features are NOT included in your bundle.
+
+```typescript
+// Core only - minimal bundle
+import { AffiliateModule } from '@nestjs-pluggable/affiliate';
+
+// Add features - each import adds only that feature's code
+import { MultiLevelFeature } from '@nestjs-pluggable/affiliate/multi-level';
+import { ExpirationFeature } from '@nestjs-pluggable/affiliate/expiration';
+```
+
+## Available Features
+
+| Feature | Import | Description |
+|---------|--------|-------------|
+| Core | `@nestjs-pluggable/affiliate` | Referral codes & commissions |
+| multi-level | `@nestjs-pluggable/affiliate/multi-level` | MLM tiered commissions |
+| analytics | `@nestjs-pluggable/affiliate/analytics` | Click/conversion tracking |
+| expiration | `@nestjs-pluggable/affiliate/expiration` | Code expiry & usage limits |
 
 ## Installation
 
 ```bash
 pnpm add @nestjs-pluggable/affiliate
-# or
-npm install @nestjs-pluggable/affiliate
 ```
 
-## Usage
+## Quick Start
 
-### 1. Create an adapter
-
-Implement `AffiliateRepository` with your database:
+### Core Only
 
 ```typescript
-import { Injectable } from '@nestjs/common';
-import { AffiliateRepository } from '@nestjs-pluggable/affiliate';
-import { PrismaService } from './prisma.service';
+import { AffiliateModule, AffiliateRepository } from '@nestjs-pluggable/affiliate';
 
+// 1. Create adapter
 @Injectable()
-export class PrismaAffiliateAdapter implements AffiliateRepository {
-  constructor(private prisma: PrismaService) {}
+class MyAdapter implements AffiliateRepository {
+  async createReferralCode(userId: string, code: string) { /* ... */ }
+  async findUserByCode(code: string) { /* ... */ }
+  async addCommission(userId: string, amount: number) { /* ... */ }
+}
 
-  async createReferralCode(userId: string, code: string): Promise<void> {
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { referralCode: code },
-    });
-  }
+// 2. Register
+@Module({
+  imports: [
+    AffiliateModule.register({
+      adapter: MyAdapter,
+    }),
+  ],
+  providers: [MyAdapter],
+})
+export class AppModule {}
 
-  async findUserByCode(code: string) {
-    return this.prisma.user.findUnique({ where: { referralCode: code } });
-  }
+// 3. Use
+@Injectable()
+class MyService {
+  constructor(private affiliate: AffiliateService) {}
 
-  async addCommission(userId: string, amount: number): Promise<void> {
-    await this.prisma.wallet.update({
-      where: { userId },
-      data: { balance: { increment: amount } },
-    });
+  async createCode(userId: string) {
+    return this.affiliate.generateReferralCode(userId);
   }
 }
 ```
 
-### 2. Register the module
+### With Features
 
 ```typescript
-import { Module } from '@nestjs/common';
 import { AffiliateModule } from '@nestjs-pluggable/affiliate';
-import { PrismaAffiliateAdapter } from './prisma-affiliate.adapter';
+import { MultiLevelFeature } from '@nestjs-pluggable/affiliate/multi-level';
+import { ExpirationFeature } from '@nestjs-pluggable/affiliate/expiration';
 
 @Module({
   imports: [
     AffiliateModule.register({
-      adapter: PrismaAffiliateAdapter,
+      adapter: MyAdapter,
+      features: [
+        // Each feature requires its own adapter
+        MultiLevelFeature.configure({
+          adapter: MyMultiLevelAdapter,
+          maxLevels: 3,
+          tiers: [
+            { level: 1, rate: 0.10 },
+            { level: 2, rate: 0.05 },
+            { level: 3, rate: 0.02 },
+          ],
+        }),
+        ExpirationFeature.configure({
+          adapter: MyExpirationAdapter,
+        }),
+      ],
     }),
   ],
-  providers: [PrismaAffiliateAdapter],
 })
 export class AppModule {}
 ```
 
-### 3. Use the service
+---
+
+## Feature: multi-level
+
+MLM-style tiered referral commissions.
 
 ```typescript
-import { AffiliateService } from '@nestjs-pluggable/affiliate';
+import { MultiLevelFeature, MultiLevelService, MultiLevelRepository } from '@nestjs-pluggable/affiliate/multi-level';
 
+// Adapter interface
 @Injectable()
-export class PaymentService {
-  constructor(private affiliateService: AffiliateService) {}
+class MyMultiLevelAdapter implements MultiLevelRepository {
+  async setReferrer(userId: string, referrerId: string) { /* ... */ }
+  async getReferralChain(userId: string, maxLevels: number) { /* ... */ }
+  async getDirectReferrals(userId: string) { /* ... */ }
+  async addTieredCommission(userId: string, amount: number, level: number, sourceUserId: string) { /* ... */ }
+}
 
-  async handlePayment(referralCode: string, amount: number) {
-    const result = await this.affiliateService.processReferral(referralCode, amount * 0.1);
-    if (result.success) {
-      console.log(`Commission added to ${result.referrerId}`);
-    }
+// Usage
+@Injectable()
+class MyService {
+  constructor(private multiLevel: MultiLevelService) {}
+
+  async process(userId: string, amount: number) {
+    // Returns commissions for all levels
+    const commissions = await this.multiLevel.processMultiLevelCommission(userId, amount);
+    // => [{ userId: "ref-1", level: 1, amount: 10 }, ...]
   }
 }
 ```
 
-## API
+---
 
-### AffiliateService
+## Feature: analytics
 
-| Method | Description |
-|--------|-------------|
-| `generateReferralCode(userId, config?)` | Generate and save a referral code |
-| `generateCodes(config)` | Generate multiple codes (doesn't save) |
-| `createReferralCode(userId, code)` | Save a custom referral code |
-| `processReferral(code, amount)` | Find referrer and add commission |
-| `getReferrer(code)` | Get user by referral code |
-
-### Code Generation Config
+Track clicks, signups, conversions.
 
 ```typescript
-import { Charset, charset } from '@nestjs-pluggable/affiliate';
+import { AnalyticsFeature, AnalyticsService, AnalyticsRepository } from '@nestjs-pluggable/affiliate/analytics';
 
-await affiliateService.generateReferralCode(userId, {
-  length: 8,                              // Default: 8
-  prefix: 'REF-',                         // Optional prefix
-  postfix: '-2024',                       // Optional postfix
-  pattern: 'PROMO-####-####',             // # = random char
-  charset: charset(Charset.ALPHANUMERIC), // NUMBERS | ALPHABETIC | ALPHANUMERIC
-});
+// Adapter interface
+@Injectable()
+class MyAnalyticsAdapter implements AnalyticsRepository {
+  async trackEvent(code: string, type: 'click' | 'signup' | 'conversion', metadata?: Record<string, unknown>) { /* ... */ }
+  async getStatsByCode(code: string, dateRange?: DateRange) { /* ... */ }
+  async getStatsByUser(userId: string, dateRange?: DateRange) { /* ... */ }
+  async getTopCodes(limit: number, metric: string, dateRange?: DateRange) { /* ... */ }
+  async getEvents(code: string, type?: string, dateRange?: DateRange) { /* ... */ }
+}
+
+// Usage
+@Injectable()
+class MyService {
+  constructor(private analytics: AnalyticsService) {}
+
+  async trackClick(code: string, source: string) {
+    await this.analytics.trackClick(code, { source });
+  }
+
+  async getStats(code: string) {
+    return this.analytics.getCodeStats(code);
+    // => { code, clicks: 100, signups: 50, conversions: 10, totalCommission: 500 }
+  }
+}
 ```
 
-### Module Registration
+---
+
+## Feature: expiration
+
+Code expiry and usage limits.
 
 ```typescript
-// Basic
-AffiliateModule.register({ adapter: YourAdapter })
+import { ExpirationFeature, ExpirationService, ExpirationRepository } from '@nestjs-pluggable/affiliate/expiration';
 
-// Global
-AffiliateModule.forRoot({ adapter: YourAdapter })
+// Adapter interface - simple CRUD operations
+@Injectable()
+class MyExpirationAdapter implements ExpirationRepository {
+  async save(code: string, constraints: CreateCodeConstraints) { /* ... */ }
+  async findByCode(code: string) { /* ... */ }
+  async findAll() { /* ... */ }
+  async update(code: string, data: UpdateCodeConstraints) { /* ... */ }
+  async delete(code: string) { /* ... */ }
+}
 
-// Async
-AffiliateModule.registerAsync({
-  imports: [ConfigModule],
-  useFactory: (config) => ({ adapter: config.get('ADAPTER') }),
-  inject: [ConfigService],
+// Usage
+@Injectable()
+class MyService {
+  constructor(private expiration: ExpirationService) {}
+
+  async setupCode(code: string) {
+    await this.expiration.setExpirationFromDuration(code, '30d');
+    await this.expiration.setMaxUses(code, 100);
+  }
+
+  async useCode(code: string) {
+    const result = await this.expiration.useCode(code);
+    if (!result.isValid) {
+      throw new Error(result.reason); // 'expired' | 'max_uses_reached' | 'inactive'
+    }
+    return result.uses; // Current usage count
+  }
+}
+```
+
+Duration formats: `30d`, `24h`, `1w`, `1M`, `1y`
+
+---
+
+## Standalone Modules (Alternative)
+
+Features can also be used as standalone modules:
+
+```typescript
+import { MultiLevelModule } from '@nestjs-pluggable/affiliate/multi-level';
+import { AnalyticsModule } from '@nestjs-pluggable/affiliate/analytics';
+
+@Module({
+  imports: [
+    MultiLevelModule.register({
+      adapter: MyMultiLevelAdapter,
+      maxLevels: 3,
+      tiers: [...],
+    }),
+    AnalyticsModule.register({
+      adapter: MyAnalyticsAdapter,
+    }),
+  ],
 })
+export class AppModule {}
 ```
+
+## Bundle Size
+
+| Import | Included |
+|--------|----------|
+| `@nestjs-pluggable/affiliate` | Core only |
+| `+ multi-level` | Core + multi-level |
+| `+ analytics` | Core + analytics |
+| `+ expiration` | Core + expiration |
+
+**Unused features = zero bytes in your bundle.**
 
 ## License
 
