@@ -21,14 +21,19 @@ export class ExpirationService {
     code: string,
     constraints: CreateCodeConstraints,
   ): Promise<void> {
-    await this.repository.setConstraints(code, constraints);
+    await this.repository.save(code, constraints);
   }
 
   /**
    * Set expiration date for a code
    */
   async setExpiration(code: string, expiresAt: Date): Promise<void> {
-    await this.repository.setConstraints(code, { expiresAt });
+    const existing = await this.repository.findByCode(code);
+    if (existing) {
+      await this.repository.update(code, { expiresAt });
+    } else {
+      await this.repository.save(code, { expiresAt });
+    }
   }
 
   /**
@@ -39,28 +44,33 @@ export class ExpirationService {
     duration: string,
   ): Promise<void> {
     const expiresAt = this.parseDuration(duration);
-    await this.repository.setConstraints(code, { expiresAt });
+    await this.setExpiration(code, expiresAt);
   }
 
   /**
    * Set maximum usage limit for a code
    */
   async setMaxUses(code: string, maxUses: number): Promise<void> {
-    await this.repository.setConstraints(code, { maxUses });
+    const existing = await this.repository.findByCode(code);
+    if (existing) {
+      await this.repository.update(code, { maxUses });
+    } else {
+      await this.repository.save(code, { maxUses });
+    }
   }
 
   /**
    * Get constraints for a code
    */
   async getConstraints(code: string): Promise<CodeConstraints | null> {
-    return this.repository.getConstraints(code);
+    return this.repository.findByCode(code);
   }
 
   /**
    * Check if a code is valid (not expired, not maxed out, is active)
    */
   async validateCode(code: string): Promise<CodeValidationResult> {
-    const constraints = await this.repository.getConstraints(code);
+    const constraints = await this.repository.findByCode(code);
 
     if (!constraints) {
       return { isValid: false, reason: 'not_found' };
@@ -70,14 +80,11 @@ export class ExpirationService {
       return { isValid: false, reason: 'inactive' };
     }
 
-    if (constraints.expiresAt && new Date() > constraints.expiresAt) {
+    if (this.isExpired(constraints)) {
       return { isValid: false, reason: 'expired' };
     }
 
-    if (
-      constraints.maxUses !== undefined &&
-      constraints.currentUses >= constraints.maxUses
-    ) {
+    if (this.isMaxedOut(constraints)) {
       return { isValid: false, reason: 'max_uses_reached' };
     }
 
@@ -93,45 +100,57 @@ export class ExpirationService {
       return validation;
     }
 
-    const uses = await this.repository.incrementUsage(code);
-    return { isValid: true, uses };
+    const constraints = await this.repository.findByCode(code);
+    if (!constraints) {
+      return { isValid: false, reason: 'not_found' };
+    }
+
+    const newUses = constraints.currentUses + 1;
+    await this.repository.update(code, { currentUses: newUses });
+    return { isValid: true, uses: newUses };
   }
 
   /**
    * Deactivate a code
    */
   async deactivate(code: string): Promise<void> {
-    await this.repository.deactivate(code);
+    await this.repository.update(code, { isActive: false });
   }
 
   /**
    * Activate a code
    */
   async activate(code: string): Promise<void> {
-    await this.repository.activate(code);
+    await this.repository.update(code, { isActive: true });
   }
 
   /**
    * Get all expired codes (for cleanup)
    */
   async getExpiredCodes(): Promise<string[]> {
-    return this.repository.getExpiredCodes();
+    const allConstraints = await this.repository.findAll();
+    return allConstraints
+      .filter((c) => this.isExpired(c))
+      .map((c) => c.code);
   }
 
   /**
    * Get all codes that reached max usage
    */
   async getMaxedOutCodes(): Promise<string[]> {
-    return this.repository.getMaxedOutCodes();
+    const allConstraints = await this.repository.findAll();
+    return allConstraints
+      .filter((c) => this.isMaxedOut(c))
+      .map((c) => c.code);
   }
 
   /**
    * Check remaining uses for a code
    */
   async getRemainingUses(code: string): Promise<number | null> {
-    const constraints = await this.repository.getConstraints(code);
+    const constraints = await this.repository.findByCode(code);
     if (!constraints || constraints.maxUses === undefined) {
-      return null; // Unlimited
+      return null;
     }
     return Math.max(0, constraints.maxUses - constraints.currentUses);
   }
@@ -140,11 +159,35 @@ export class ExpirationService {
    * Check time until expiration
    */
   async getTimeUntilExpiration(code: string): Promise<number | null> {
-    const constraints = await this.repository.getConstraints(code);
+    const constraints = await this.repository.findByCode(code);
     if (!constraints || !constraints.expiresAt) {
-      return null; // Never expires
+      return null;
     }
     return Math.max(0, constraints.expiresAt.getTime() - Date.now());
+  }
+
+  /**
+   * Delete constraints for a code
+   */
+  async deleteConstraints(code: string): Promise<void> {
+    await this.repository.delete(code);
+  }
+
+  /**
+   * Check if constraints indicate an expired code
+   */
+  private isExpired(constraints: CodeConstraints): boolean {
+    return !!(constraints.expiresAt && new Date() > constraints.expiresAt);
+  }
+
+  /**
+   * Check if constraints indicate a maxed out code
+   */
+  private isMaxedOut(constraints: CodeConstraints): boolean {
+    return !!(
+      constraints.maxUses !== undefined &&
+      constraints.currentUses >= constraints.maxUses
+    );
   }
 
   private parseDuration(duration: string): Date {
@@ -176,6 +219,7 @@ export class ExpirationService {
       case 'y':
         now.setFullYear(now.getFullYear() + value);
         return now;
+      /* istanbul ignore next */
       default:
         throw new Error(`Unknown duration unit: ${unit}`);
     }

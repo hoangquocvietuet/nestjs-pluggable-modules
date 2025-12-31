@@ -9,48 +9,46 @@ export interface CodeConstraints {
 export interface CreateCodeConstraints {
   expiresAt?: Date;
   maxUses?: number;
+  isActive?: boolean;
+}
+
+export interface UpdateCodeConstraints {
+  expiresAt?: Date;
+  maxUses?: number;
+  currentUses?: number;
+  isActive?: boolean;
 }
 
 /**
  * Abstract repository for code expiration and usage limits.
- * Implement this interface to support time-limited and usage-limited codes.
+ * Implements basic CRUD operations - all business logic lives in the service.
  */
 export abstract class ExpirationRepository {
   /**
-   * Set constraints for a referral code
+   * Save constraints for a code (create or update)
    */
-  abstract setConstraints(
+  abstract save(code: string, constraints: CreateCodeConstraints): Promise<void>;
+
+  /**
+   * Find constraints by code
+   */
+  abstract findByCode(code: string): Promise<CodeConstraints | null>;
+
+  /**
+   * Find all code constraints
+   */
+  abstract findAll(): Promise<CodeConstraints[]>;
+
+  /**
+   * Update constraints for a code
+   */
+  abstract update(
     code: string,
-    constraints: CreateCodeConstraints,
+    data: UpdateCodeConstraints,
   ): Promise<void>;
 
   /**
-   * Get constraints for a code
+   * Delete constraints for a code
    */
-  abstract getConstraints(code: string): Promise<CodeConstraints | null>;
-
-  /**
-   * Increment usage count for a code
-   */
-  abstract incrementUsage(code: string): Promise<number>;
-
-  /**
-   * Deactivate a code (soft delete)
-   */
-  abstract deactivate(code: string): Promise<void>;
-
-  /**
-   * Reactivate a code
-   */
-  abstract activate(code: string): Promise<void>;
-
-  /**
-   * Get all expired codes (for cleanup jobs)
-   */
-  abstract getExpiredCodes(): Promise<string[]>;
-
-  /**
-   * Get all codes that have reached max usage
-   */
-  abstract getMaxedOutCodes(): Promise<string[]>;
+  abstract delete(code: string): Promise<void>;
 }

@@ -174,16 +174,14 @@ Code expiry and usage limits.
 ```typescript
 import { ExpirationFeature, ExpirationService, ExpirationRepository } from '@nestjs-pluggable/affiliate/expiration';
 
-// Adapter interface
+// Adapter interface - simple CRUD operations
 @Injectable()
 class MyExpirationAdapter implements ExpirationRepository {
-  async setConstraints(code: string, constraints: CreateCodeConstraints) { /* ... */ }
-  async getConstraints(code: string) { /* ... */ }
-  async incrementUsage(code: string) { /* ... */ }
-  async deactivate(code: string) { /* ... */ }
-  async activate(code: string) { /* ... */ }
-  async getExpiredCodes() { /* ... */ }
-  async getMaxedOutCodes() { /* ... */ }
+  async save(code: string, constraints: CreateCodeConstraints) { /* ... */ }
+  async findByCode(code: string) { /* ... */ }
+  async findAll() { /* ... */ }
+  async update(code: string, data: UpdateCodeConstraints) { /* ... */ }
+  async delete(code: string) { /* ... */ }
 }
 
 // Usage

@@ -6,21 +6,15 @@ import { ExpirationRepository } from './interfaces/expiration-repository.interfa
 
 @Injectable()
 class MockExpirationAdapter implements ExpirationRepository {
-  async setConstraints() {}
-  async getConstraints() {
+  async save() {}
+  async findByCode() {
     return null;
   }
-  async incrementUsage() {
-    return 1;
-  }
-  async deactivate() {}
-  async activate() {}
-  async getExpiredCodes() {
+  async findAll() {
     return [];
   }
-  async getMaxedOutCodes() {
-    return [];
-  }
+  async update() {}
+  async delete() {}
 }
 
 describe('ExpirationModule', () => {
